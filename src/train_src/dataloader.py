@@ -1,40 +1,49 @@
-import os
 import torch
-from torch.utils.data import dataset
-from PIL import Image
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, sampler, random_split
 
-# write a class dataloader that inherits from dataset, and processes data/CUB_200_2011
-class dataloader(dataset):
-    def __init__(self, data_path, transform=None):
-        self.data_path = data_path
-        self.transform = transform
-        self.data = []
-        self.labels = []
-        self.classes = []
-        self.class_to_idx = {}
-        self.idx_to_class = {}
-        self.load_data()
 
-    def load_data(self):
-        # get all classes
-        self.classes = [d for d in os.listdir(self.data_path) if os.path.isdir(os.path.join(self.data_path, d))]
-        self.classes.sort()
-        for i, c in enumerate(self.classes):
-            self.class_to_idx[c] = i
-            self.idx_to_class[i] = c
-            files = os.listdir(os.path.join(self.data_path, c))
-            for f in files:
-                if f.endswith('.jpg'):
-                    self.data.append(os.path.join(self.data_path, c, f))
-                    self.labels.append(i)
+def get_classes(data_dir):
+    all_data = datasets.ImageFolder(data_dir)
+    return all_data.classes
 
-    def __len__(self):
-        return len(self.data)
 
-    def __getitem__(self, idx):
-        img_path = self.data[idx]
-        label = self.labels[idx]
-        img = Image.open(img_path)
-        if self.transform:
-            img = self.transform(img)
-        return img, label
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def get_data_loaders(data_dir, batch_size, train=False):
+    if train:
+        transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5),
+            transforms.RandomApply(torch.nn.ModuleList([transforms.ColorJitter()]), p=0.1),
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            #             transforms.RandomErasing(p=0.25, value='random')
+        ])
+        all_data = datasets.ImageFolder(data_dir, transform=transform)
+        train_data_len = int(len(all_data) * 0.75)
+        valid_data_len = int((len(all_data) - train_data_len) / 2)
+        test_data_len = int(len(all_data) - train_data_len - valid_data_len)
+        train_data, val_data, test_data = random_split(all_data, [train_data_len, valid_data_len, test_data_len])
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4)
+        return train_loader, train_data_len
+
+    else:
+        transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+        all_data = datasets.ImageFolder(data_dir, transform=transform)
+        train_data_len = int(len(all_data) * 0.70)
+        valid_data_len = int((len(all_data) - train_data_len) / 2)
+        test_data_len = int(len(all_data) - train_data_len - valid_data_len)
+        train_data, val_data, test_data = random_split(all_data, [train_data_len, valid_data_len, test_data_len])
+        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=True, num_workers=4)
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True, num_workers=4)
+        return (val_loader, test_loader, valid_data_len, test_data_len)
