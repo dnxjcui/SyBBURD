@@ -1,6 +1,6 @@
 import torch
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, sampler, random_split
 
 
 def get_classes(data_dir):

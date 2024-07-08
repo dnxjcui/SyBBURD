@@ -1,9 +1,9 @@
-from tqdm import tqdm
-import time
-from dataloader import get_classes, get_data_loaders, count_parameters
 import copy
-import torch
 import os
+import time
+
+import torch
+from tqdm import tqdm
 
 
 class Trainer:
@@ -15,7 +15,7 @@ class Trainer:
                  num_epochs,
                  dataset_sizes,
                  dataloaders,
-                 checkpoint_dir,
+                 save_dir,
                  training_history,
                  validation_history):
         self.model = model
@@ -26,7 +26,7 @@ class Trainer:
         self.num_epochs = num_epochs
         self.dataset_sizes = dataset_sizes
         self.dataloaders = dataloaders
-        self.checkpoint_dir = checkpoint_dir
+        self.save_dir = save_dir
         self.training_history = training_history
         self.validation_history = validation_history
 
@@ -39,7 +39,7 @@ class Trainer:
         num_epochs = self.num_epochs
         dataset_sizes = self.dataset_sizes
         dataloaders = self.dataloaders
-        checkpoint_dir = self.checkpoint_dir
+        save_dir = self.save_dir
         training_history = self.training_history
         validation_history = self.validation_history
 
@@ -82,14 +82,16 @@ class Trainer:
                             loss.backward()
                             optimizer.step()
 
+                    matches = torch.eq(preds, labels.data)
+
                     # statistics
                     running_loss += loss.item() * inputs.size(0)
-                    running_corrects += torch.sum(preds == labels.data)
+                    running_corrects += matches.sum().item()
                 if phase == 'train':
                     scheduler.step()
 
                 epoch_loss = running_loss / dataset_sizes[phase]
-                epoch_acc = running_corrects.double() / dataset_sizes[phase]
+                epoch_acc = running_corrects / dataset_sizes[phase]
 
                 if phase == 'train':
                     training_history['accuracy'].append(
@@ -107,20 +109,21 @@ class Trainer:
                 if phase == 'val' and epoch_acc > best_acc:
                     best_acc = epoch_acc
                     best_model_wts = copy.deepcopy(model.state_dict())
+                    # Save checkpoint
+                    save_path = os.path.join(save_dir, 'model.pt'.format(epoch))
+                    torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'best_acc': best_acc,
+                        'training_history': training_history,
+                        'validation_history': validation_history
+                    }, save_path)
 
-            # Save checkpoint
-            checkpoint_path = os.path.join(checkpoint_dir, 'checkpoint_epoch_{}.pt'.format(epoch))
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'best_acc': best_acc,
-                'training_history': training_history,
-                'validation_history': validation_history
-            }, checkpoint_path)
-
-            print("Checkpoint saved:", checkpoint_path)
+                    time_elapsed = time.time() - since
+                    print('\nSaving best model: {:.4f}% validation accuracy at epoch {:.0f}, training time '
+                          '{:.0f}m {:.0f}s'.format(epoch_acc, epoch, time_elapsed // 60, time_elapsed % 60))
 
             print()
 
