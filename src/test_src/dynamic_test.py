@@ -1,10 +1,9 @@
+import glob
 import os
 
 import torch.backends.cudnn
 import torchvision.transforms.functional
 from torch import nn
-from tqdm import tqdm
-import glob
 
 from src.train_src.dataloader import get_classes
 from test import predict, formatText
@@ -40,10 +39,11 @@ if __name__ == "__main__":
     input_text = "Enter the image path (enter q to end): "
     while im_path != 'q':
         im_path = input(input_text)
+        tmp = glob.glob(os.path.join(dataset_path, '*', im_path))
         if os.path.exists(im_path):
             print(f'{formatText(predict(model, im_path, classes=classes, show_img=show_img, url=False))}\n')
             input_text = "Enter the image path (enter q to end):"
-        elif os.path.exists(glob.glob(os.path.join(dataset_path, '*', im_path))[0]):
+        elif tmp and os.path.exists(tmp[0]):
             print(f'{formatText(predict(model, (glob.glob(os.path.join(dataset_path, "*", im_path))[0]), classes=classes, show_img=show_img, url=False))}\n')
             input_text = "Enter the image path (enter q to end):"
         else:
